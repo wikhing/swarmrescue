@@ -11,7 +11,6 @@ def get_active_drones() -> str:
     print("\n[SYSTEM] Radar Specialist requested drone status.")
     
     for drone in sim.agents:
-        # Reads data from actual drone
         if isinstance(drone, DroneAgent):
             status = f"Drone {drone.unique_id}: Location {drone.pos}, Battery {drone.battery}%"
             status_list.append(status)
@@ -44,7 +43,6 @@ def thermal_scan(drone_id: int) -> str:
             
             drone.battery -= 5
             print(f"\n[SYSTEM] Drone {drone_id} is running a thermal scan at {drone.pos}...")
-            sim.print_radar()
             
             if drone.pos == sim.survivor_location:
                 return f"CRITICAL SUCCESS! Drone {drone_id} found a survivor at {drone.pos}!"
