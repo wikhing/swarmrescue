@@ -20,8 +20,8 @@ def run_mission():
         # The Agents
         radar_agent = Agent(
             role="Radar Specialist",
-            goal="Monitor the disaster zone and report exactly which drones are active and their battery levels.",
-            backstory="You are an expert at analyzing drone telemetry. You never guess; you always use your tools to check the exact status of the swarm.",
+            goal="Monitor the disaster zone, find distress signals, and report active drones.",
+            backstory="You are an expert at analyzing drone telemetry. You never guess; you always use your tools.",
             tools=tools,
             llm="gemini/gemini-2.5-flash",
             verbose=True
@@ -43,17 +43,17 @@ def run_mission():
         
         # The Tasks
         scan_task = Task(
-            description="Use the get_active_drones tool to get the list of active drones and their battery levels. Pass this data to the pilot.",
-            expected_output="A list of active drones and their current battery levels.",
+            description="Use get_active_drones to get drone status. THEN use get_distress_signal to find the target coordinate. Pass BOTH the drone list and the target coordinate to the pilot.",
+            expected_output="A list of active drones and the exact coordinate of the distress signal.",
             agent=radar_agent
         )
         
         rescue_task = Task(
-            description="""We received a faint distress signal from Sector 8-2 (Coordinate X:8, Y:2). 
-            Look at the active drones list. Pick a drone with a high battery level.
-            First, move that drone to X:8, Y:2. 
-            Second, execute a thermal_scan with that drone to find the survivor.""",
-            expected_output="Confirmation of the thermal scan results at coordinate (8, 2).",
+            description="""Look at the data provided by the Radar Specialist. 
+            Pick a drone with a high battery level.
+            First, move that drone to the distress signal coordinate provided. 
+            Second, execute a thermal_scan with that drone to confirm the survivor.""",
+            expected_output="Confirmation of the thermal scan results at the target coordinate.",
             agent=pilot_agent
         )
         
@@ -64,13 +64,9 @@ def run_mission():
             verbose=True
         )
         
-        print("\n🚨 URGENT MISSION: Distress signal detected at (8, 2). Dispatching Swarm. 🚨\n" + "-"*60)
-        
+        print("\n🚨 URGENT MISSION: Scanning for distress signals. Dispatching Swarm. 🚨\n" + "-"*60)
         result = rescue_swarm.kickoff()
-        
-        print("\n" + "="*60)
-        print("FINAL MISSION LOG FOR JUDGES:")
-        print(result)
+        print("\n" + "="*60 + "\nFINAL MISSION LOG FOR JUDGES:\n" + str(result))
 
 if __name__ == "__main__":
     run_mission()

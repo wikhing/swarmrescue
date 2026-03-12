@@ -4,6 +4,7 @@ from mesa.space import MultiGrid
 class VisitedMarker(Agent):
     def __init__(self, model):
         super().__init__(model)
+
     def step(self):
         pass
 
@@ -14,42 +15,25 @@ class DroneAgent(Agent):
 
     def step(self):
         old_position = self.pos
-
-         # Look at surrounding squares
-        possible_steps = self.model.grid.get_neighborhood(
-            self.pos,
-            moore=True, # allows diagonally movement
-            include_center=False
-        )
-
-        # Filter out squares the swarm has already searched
+        possible_steps = self.model.grid.get_neighborhood(self.pos, moore=True, include_center=False)
         unvisited_steps = [step for step in possible_steps if step not in self.model.visited_cells]
 
         if unvisited_steps:
-            # Pick the unvisited square FURTHEST from other drones
             best_step = None
             max_distance = -1
-
-            # Find all other drones to coordinate with
-            other_drones = [agent for agent in self.model.agents if type(agent).__name__ == "DroneAgent" and agent != self]
+            other_drones = [a for a in self.model.agents if type(a).__name__ == "DroneAgent" and a != self]
 
             for step in unvisited_steps:
-                # Calculate "Manhattan distance" to other drones
                 dist_to_others = sum(abs(step[0] - other.pos[0]) + abs(step[1] - other.pos[1]) for other in other_drones)
-
                 if dist_to_others > max_distance:
                     max_distance = dist_to_others
                     best_step = step
-            
             new_position = best_step
         else:
-            # If completely surrounded by searched squares, move randomly to break out
             new_position = self.random.choice(possible_steps)
 
-        # Execute the move
         self.model.grid.move_agent(self, new_position)
         
-        # Leave visited marker at the old square
         if old_position not in self.model.visited_cells:
             self.model.visited_cells.add(old_position)
             marker = VisitedMarker(self.model)
@@ -58,26 +42,26 @@ class DroneAgent(Agent):
 class SurvivorAgent(Agent):
     def __init__(self, model):
         super().__init__(model)
+
     def step(self):
         pass
 
 class RescueModel(Model):
-    def __init__(self, width=10, height=10, num_drones=3):
-        super().__init__()
+    def __init__(self, width=15, height=15, num_drones=4, num_survivors=1, **kwargs):
+        super().__init__(**kwargs) 
         self.running = True 
-
-        # Shared the memory map for each other
         self.visited_cells = set() 
         
         self.num_drones = num_drones
+        self.num_survivors = num_survivors
         self.grid = MultiGrid(width, height, True)
-        self.survivor_location = (8, 2)
 
-        # Place the Survivor
-        self.survivor = SurvivorAgent(self)
-        self.grid.place_agent(self.survivor, self.survivor_location)
+        for _ in range(self.num_survivors):
+            survivor = SurvivorAgent(self)
+            x = self.random.randrange(self.grid.width)
+            y = self.random.randrange(self.grid.height)
+            self.grid.place_agent(survivor, (x, y))
 
-        # Place the Drones
         for _ in range(self.num_drones):
             drone = DroneAgent(self)
             x = self.random.randrange(self.grid.width)
@@ -87,10 +71,12 @@ class RescueModel(Model):
     def step(self):
         self.agents.shuffle_do("step")
         
-        # Stop the simulation if a drone finds survivor
-        cell_contents = self.grid.get_cell_list_contents([self.survivor_location])
-        has_drone = any(type(obj).__name__ == "DroneAgent" for obj in cell_contents)
-        
-        if has_drone:
-            print("\n[UI SYSTEM] Survivor found! Halting swarm search.")
-            self.running = False
+        survivors = [a for a in self.agents if type(a).__name__ == "SurvivorAgent"]
+        for survivor in survivors:
+            cell_contents = self.grid.get_cell_list_contents([survivor.pos])
+            has_drone = any(type(obj).__name__ == "DroneAgent" for obj in cell_contents)
+            
+            if has_drone:
+                print(f"\n[UI SYSTEM] Survivor found at {survivor.pos}! Halting swarm search.")
+                self.running = False 
+                break
