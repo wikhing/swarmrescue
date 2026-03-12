@@ -1,16 +1,21 @@
 from mesa import Agent, Model
 from mesa.space import MultiGrid
 
+class VisitedMarker(Agent):
+    def __init__(self, model):
+        super().__init__(model)
+    def step(self):
+        pass
+
 class DroneAgent(Agent):
     def __init__(self, model):
         super().__init__(model) 
         self.battery = 100
 
     def step(self):
-        # Communication: Mark current position as searched
-        self.model.visited_cells.add(self.pos)
+        old_position = self.pos
 
-        # Look at surrounding squares
+         # Look at surrounding squares
         possible_steps = self.model.grid.get_neighborhood(
             self.pos,
             moore=True, # allows diagonally movement
@@ -26,13 +31,11 @@ class DroneAgent(Agent):
             max_distance = -1
 
             # Find all other drones to coordinate with
-            other_drones = [agent for agent in self.model.agents if isinstance(agent, DroneAgent) and agent != self]
+            other_drones = [agent for agent in self.model.agents if type(agent).__name__ == "DroneAgent" and agent != self]
 
             for step in unvisited_steps:
                 # Calculate "Manhattan distance" to other drones
-                dist_to_others = 0
-                for other in other_drones:
-                    dist_to_others += (abs(step[0] - other.pos[0]) + abs(step[1] - other.pos[1]))
+                dist_to_others = sum(abs(step[0] - other.pos[0]) + abs(step[1] - other.pos[1]) for other in other_drones)
 
                 if dist_to_others > max_distance:
                     max_distance = dist_to_others
@@ -43,9 +46,14 @@ class DroneAgent(Agent):
             # If completely surrounded by searched squares, move randomly to break out
             new_position = self.random.choice(possible_steps)
 
-        # Execute the move and update the shared map
+        # Execute the move
         self.model.grid.move_agent(self, new_position)
-        self.model.visited_cells.add(new_position)
+        
+        # Leave visited marker at the old square
+        if old_position not in self.model.visited_cells:
+            self.model.visited_cells.add(old_position)
+            marker = VisitedMarker(self.model)
+            self.model.grid.place_agent(marker, old_position)
 
 class SurvivorAgent(Agent):
     def __init__(self, model):
@@ -57,7 +65,7 @@ class RescueModel(Model):
     def __init__(self, width=10, height=10, num_drones=3):
         super().__init__()
         self.running = True 
-        
+
         # Shared the memory map for each other
         self.visited_cells = set() 
         
@@ -81,7 +89,7 @@ class RescueModel(Model):
         
         # Stop the simulation if a drone finds survivor
         cell_contents = self.grid.get_cell_list_contents([self.survivor_location])
-        has_drone = any(isinstance(obj, DroneAgent) for obj in cell_contents)
+        has_drone = any(type(obj).__name__ == "DroneAgent" for obj in cell_contents)
         
         if has_drone:
             print("\n[UI SYSTEM] Survivor found! Halting swarm search.")

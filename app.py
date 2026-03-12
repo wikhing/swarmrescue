@@ -6,6 +6,8 @@ def agent_portrayal(agent):
         return {"color": "tab:blue", "marker": "o", "size": 150}
     elif type(agent).__name__ == "SurvivorAgent":
         return {"color": "tab:red", "marker": "*", "size": 200}
+    elif type(agent).__name__ == "VisitedMarker":
+        return {"color": "lightgreen", "marker": "s", "size": 50}
     return {}
 
 space = make_space_component(agent_portrayal)
