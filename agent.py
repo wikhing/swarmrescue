@@ -4,69 +4,48 @@ from crewai_tools import MCPServerAdapter
 from mcp import StdioServerParameters
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 
 def run_mission():
-    print("Initiating First Responder Swarm Interface...")
-    
-    server_params = StdioServerParameters(
-        command="python",
-        args=["mcp_server.py"],
-        env=os.environ
-    )
+    server_params = StdioServerParameters(command="python", args=["mcp_server.py"], env=os.environ)
     
     with MCPServerAdapter(server_params) as tools:
         
-        # The Agents
-        radar_agent = Agent(
-            role="Radar Specialist",
-            goal="Monitor the disaster zone, find distress signals, and report active drones.",
-            backstory="You are an expert at analyzing drone telemetry. You never guess; you always use your tools.",
+        swarm_commander = Agent(
+            role="Swarm Commander AI",
+            goal="Coordinate a fleet of drones, strictly manage battery constraints, and rescue survivors.",
+            backstory="""You are a strictly logical AI. 
+            CRITICAL JUDGING RUBRIC RULES:
+            1. REAL-TIME DISCOVERY: Use `get_mission_brief` to discover active drones. NEVER guess their IDs.
+            2. STRATEGIC MANAGEMENT: You must assign different drones to different tasks based on their battery.
+            3. MANDATORY PROTOCOL: You must use the MCP `move_drone` and `recharge_drone` tools.
+            4. CHAIN OF THOUGHT: Before executing any move, you MUST explain your logic using this exact format:
+               "Drone [ID] has [X]% battery, so I am assigning the closer Sector [Y] to it while sending Drone [ID2] to the further Sector [Z]"
+            """,
             tools=tools,
             llm="gemini/gemini-2.5-flash",
-            verbose=True
+            verbose=True,
+            max_rpm=15,
+            max_iter=10
         )
         
-        pilot_agent = Agent(
-            role="Rescue Pilot",
-            goal="Move drones to requested coordinates, manage battery life, and scan for survivors.",
-            backstory="""You are a veteran drone pilot. 
-            CRITICAL RULES: 
-            1. Before moving, you MUST explain your reasoning about the battery level.
-            2. Moving costs 10% battery. Scanning costs 5% battery.
-            3. If a drone's battery is below 20%, you MUST use the recharge_drone tool before using it.
-            4. Always use the thermal_scan tool after arriving at a destination.""",
-            tools=tools,
-            llm="gemini/gemini-2.5-flash",
-            verbose=True
+        mission_task = Task(
+            description="""
+            Execute the following operational sequence to prove system capabilities:
+            1. Use `get_mission_brief` to map the grid, locate the base station, and check drone batteries.
+            2. Use `get_distress_signals` to find the target.
+            3. Analyze the fleet: 
+               - Pick ONE drone with high battery and send it to the distress signal.
+               - Pick ONE drone with LOW battery, keep it at (or send it to) the Base Station coordinate, and use the `recharge_drone` tool on it to prove you can manage resources.
+            4. Once the rescue drone reaches the target, use `thermal_scan`.
+            """,
+            expected_output="A full operational log showing real-time tool discovery, Chain-of-Thought resource allocation, and a successful thermal scan.",
+            agent=swarm_commander
         )
         
-        # The Tasks
-        scan_task = Task(
-            description="Use get_active_drones to get drone status. THEN use get_distress_signal to find the target coordinate. Pass BOTH the drone list and the target coordinate to the pilot.",
-            expected_output="A list of active drones and the exact coordinate of the distress signal.",
-            agent=radar_agent
-        )
-        
-        rescue_task = Task(
-            description="""Look at the data provided by the Radar Specialist. 
-            Pick a drone with a high battery level.
-            First, move that drone to the distress signal coordinate provided. 
-            Second, execute a thermal_scan with that drone to confirm the survivor.""",
-            expected_output="Confirmation of the thermal scan results at the target coordinate.",
-            agent=pilot_agent
-        )
-        
-        # The Crew
-        rescue_swarm = Crew(
-            agents=[radar_agent, pilot_agent],
-            tasks=[scan_task, rescue_task],
-            verbose=True
-        )
-        
-        print("\n🚨 URGENT MISSION: Scanning for distress signals. Dispatching Swarm. 🚨\n" + "-"*60)
-        result = rescue_swarm.kickoff()
-        print("\n" + "="*60 + "\nFINAL MISSION LOG FOR JUDGES:\n" + str(result))
+        crew = Crew(agents=[swarm_commander], tasks=[mission_task], verbose=True)
+        print("\n🚨 INITIATING SWARM COMMAND VIA MCP... 🚨\n" + "-"*60)
+        result = crew.kickoff()
+        print("\n" + "="*60 + "\nFINAL MISSION LOG:\n" + str(result))
 
 if __name__ == "__main__":
     run_mission()

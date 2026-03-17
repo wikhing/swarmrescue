@@ -1,60 +1,37 @@
+import json
+import os
 from mesa import Agent, Model
 from mesa.space import MultiGrid
 
 class VisitedMarker(Agent):
-    def __init__(self, model):
-        super().__init__(model)
+    def __init__(self, model): super().__init__(model)
+    def step(self): pass
 
-    def step(self):
-        pass
-
-class DroneAgent(Agent):
-    def __init__(self, model):
-        super().__init__(model) 
-        self.battery = 100
-
-    def step(self):
-        old_position = self.pos
-        possible_steps = self.model.grid.get_neighborhood(self.pos, moore=True, include_center=False)
-        unvisited_steps = [step for step in possible_steps if step not in self.model.visited_cells]
-
-        if unvisited_steps:
-            best_step = None
-            max_distance = -1
-            other_drones = [a for a in self.model.agents if type(a).__name__ == "DroneAgent" and a != self]
-
-            for step in unvisited_steps:
-                dist_to_others = sum(abs(step[0] - other.pos[0]) + abs(step[1] - other.pos[1]) for other in other_drones)
-                if dist_to_others > max_distance:
-                    max_distance = dist_to_others
-                    best_step = step
-            new_position = best_step
-        else:
-            new_position = self.random.choice(possible_steps)
-
-        self.model.grid.move_agent(self, new_position)
-        
-        if old_position not in self.model.visited_cells:
-            self.model.visited_cells.add(old_position)
-            marker = VisitedMarker(self.model)
-            self.model.grid.place_agent(marker, old_position)
+class ChargingStationAgent(Agent):
+    def __init__(self, model): super().__init__(model)
+    def step(self): pass
 
 class SurvivorAgent(Agent):
-    def __init__(self, model):
-        super().__init__(model)
+    def __init__(self, model): super().__init__(model)
+    def step(self): pass
 
-    def step(self):
-        pass
+class DroneAgent(Agent):
+    def __init__(self, model): 
+        super().__init__(model) 
+        self.battery = self.model.random.choice([25, 45, 80, 100]) 
+    def step(self): pass 
 
 class RescueModel(Model):
     def __init__(self, width=15, height=15, num_drones=4, num_survivors=1, **kwargs):
         super().__init__(**kwargs) 
         self.running = True 
         self.visited_cells = set() 
-        
         self.num_drones = num_drones
         self.num_survivors = num_survivors
-        self.grid = MultiGrid(width, height, True)
+        self.grid = MultiGrid(width, height, False)
+
+        self.charging_station = ChargingStationAgent(self)
+        self.grid.place_agent(self.charging_station, (width//2, height//2))
 
         for _ in range(self.num_survivors):
             survivor = SurvivorAgent(self)
@@ -64,19 +41,33 @@ class RescueModel(Model):
 
         for _ in range(self.num_drones):
             drone = DroneAgent(self)
-            x = self.random.randrange(self.grid.width)
-            y = self.random.randrange(self.grid.height)
-            self.grid.place_agent(drone, (x, y))
+            self.grid.place_agent(drone, (width//2, height//2))
 
     def step(self):
+        if os.path.exists("swarm_state.json"):
+            try:
+                with open("swarm_state.json", "r") as f:
+                    state = json.load(f)
+                
+                ui_drones = sorted([a for a in self.agents if type(a).__name__ == "DroneAgent"], key=lambda d: d.unique_id)
+                for i, d_data in enumerate(state.get("drones", [])):
+                    if i < len(ui_drones):
+                        self.grid.move_agent(ui_drones[i], tuple(d_data["pos"]))
+                        ui_drones[i].battery = d_data["battery"]
+
+                ui_survivors = sorted([a for a in self.agents if type(a).__name__ == "SurvivorAgent"], key=lambda s: s.unique_id)
+                for i, s_data in enumerate(state.get("survivors", [])):
+                    if i < len(ui_survivors):
+                        self.grid.move_agent(ui_survivors[i], tuple(s_data["pos"]))
+                        
+                ui_markers = [a for a in self.agents if type(a).__name__ == "VisitedMarker"]
+                state_markers = state.get("markers", [])
+                if len(state_markers) > len(ui_markers):
+                    for m_data in state_markers[len(ui_markers):]:
+                        marker = VisitedMarker(self)
+                        self.grid.place_agent(marker, tuple(m_data["pos"]))
+                        
+            except Exception as e:
+                print(f"Data Bridge Error: {e}")
+
         self.agents.shuffle_do("step")
-        
-        survivors = [a for a in self.agents if type(a).__name__ == "SurvivorAgent"]
-        for survivor in survivors:
-            cell_contents = self.grid.get_cell_list_contents([survivor.pos])
-            has_drone = any(type(obj).__name__ == "DroneAgent" for obj in cell_contents)
-            
-            if has_drone:
-                print(f"\n[UI SYSTEM] Survivor found at {survivor.pos}! Halting swarm search.")
-                self.running = False 
-                break
